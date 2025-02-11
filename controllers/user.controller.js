@@ -1,57 +1,114 @@
-const UserModel = require('../models/user.model');
-const ObjectId = require('mongoose').Types.ObjectId;
+const UserModel = require("../models/user.model");
+const ObjectID = require("mongoose").Types.ObjectId;
 
+// Récupérer tous les utilisateurs
 module.exports.getAllUsers = async (req, res) => {
-    try {
-        const users = await UserModel.find().select('-password');
-        res.status(200).json(users);
-    } catch (err) {
-        console.error(err);
-        res.status(500).json({ message: 'Erreur lors de la récupération des utilisateurs.' });
-    }
+  try {
+    const users = await UserModel.find().select("-password");
+    res.status(200).json(users);
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
 };
 
+// Récupérer les informations d'un utilisateur par ID
 module.exports.userInfo = async (req, res) => {
-    try {
-        // Vérifiez si l'ID est valide
-        if (!ObjectId.isValid(req.params.id)) {
-            return res.status(400).json({ message: "L'id n'est pas valide" });
-        }
+  if (!ObjectID.isValid(req.params.id))
+    return res.status(400).send("ID unknown: " + req.params.id);
 
-        // Cherchez l'utilisateur par son ID
-        const user = await UserModel.findById(req.params.id).select('-password');
-        if (!user) {
-            return res.status(404).json({ message: "Utilisateur introuvable" });
-        }
-
-        res.status(200).json(user);
-    } catch (err) {
-        console.error(err);
-        res.status(500).json({ message: "Erreur lors de la récupération de l'utilisateur.", error: err });
-    }
+  try {
+    const user = await UserModel.findById(req.params.id).select("-password");
+    if (!user) return res.status(404).send("User not found");
+    res.status(200).json(user);
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
 };
 
+// Mettre à jour un utilisateur
 module.exports.updateUser = async (req, res) => {
-    try {
-        // Vérifiez si l'ID est valide
-        if (!ObjectId.isValid(req.params.id)) {
-            return res.status(400).json({ message: "L'id n'est pas valide" });
-        }
+  if (!ObjectID.isValid(req.params.id))
+    return res.status(400).send("ID unknown: " + req.params.id);
 
-        // Mettez à jour la bio de l'utilisateur
-        const updatedUser = await UserModel.findByIdAndUpdate(
-            req.params.id,
-            { $set: { bio: req.body.bio } },
-            { new: true, upsert: true, setDefaultsOnInsert: true }
-        );
+  try {
+    const updatedUser = await UserModel.findByIdAndUpdate(
+      req.params.id,
+      { $set: { bio: req.body.bio } },
+      { new: true, upsert: true, setDefaultsOnInsert: true }
+    );
+    res.status(200).json(updatedUser);
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+};
 
-        if (!updatedUser) {
-            return res.status(404).json({ message: "Utilisateur introuvable pour la mise à jour." });
-        }
+// Supprimer un utilisateur
+module.exports.deleteUser = async (req, res) => {
+  if (!ObjectID.isValid(req.params.id))
+    return res.status(400).send("ID unknown: " + req.params.id);
 
-        res.status(200).json(updatedUser);
-    } catch (err) {
-        console.error(err);
-        res.status(500).json({ message: "Erreur lors de la mise à jour de l'utilisateur.", error: err });
-    }
+  try {
+    await UserModel.deleteOne({ _id: req.params.id });
+    res.status(200).json({ message: "Successfully deleted." });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+};
+
+// Suivre un utilisateur
+module.exports.follow = async (req, res) => {
+  if (
+    !ObjectID.isValid(req.params.id) ||
+    !ObjectID.isValid(req.body.idToFollow)
+  )
+    return res.status(400).send("ID unknown: " + req.params.id);
+
+  try {
+    // Ajouter dans la liste "following"
+    const userFollowing = await UserModel.findByIdAndUpdate(
+      req.params.id,
+      { $addToSet: { following: req.body.idToFollow } },
+      { new: true, upsert: true }
+    );
+
+    // Ajouter dans la liste "followers"
+    await UserModel.findByIdAndUpdate(
+      req.body.idToFollow,
+      { $addToSet: { followers: req.params.id } },
+      { new: true, upsert: true }
+    );
+
+    res.status(201).json(userFollowing);
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+};
+
+// Ne plus suivre un utilisateur
+module.exports.unfollow = async (req, res) => {
+  if (
+    !ObjectID.isValid(req.params.id) ||
+    !ObjectID.isValid(req.body.idToUnfollow)
+  )
+    return res.status(400).send("ID unknown: " + req.params.id);
+
+  try {
+    // Retirer de la liste "following"
+    const userUnfollowing = await UserModel.findByIdAndUpdate(
+      req.params.id,
+      { $pull: { following: req.body.idToUnfollow } },
+      { new: true, upsert: true }
+    );
+
+    // Retirer de la liste "followers"
+    await UserModel.findByIdAndUpdate(
+      req.body.idToUnfollow,
+      { $pull: { followers: req.params.id } },
+      { new: true, upsert: true }
+    );
+
+    res.status(201).json(userUnfollowing);
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
 };
